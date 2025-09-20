@@ -51,10 +51,25 @@
       top: 8px;
       left: 8px;
       transform: scale(1.5);
-      display: none; /* default disembunyikan */
+      display: none;
     }
     body.select-mode .item input[type="checkbox"] {
-      display: block; /* tampil saat mode pilih */
+      display: block;
+    }
+    /* Drag & drop */
+    .drop-zone {
+      border: 3px dashed #007bff;
+      padding: 30px;
+      border-radius: 12px;
+      background: #eaf4ff;
+      color: #007bff;
+      font-size: 16px;
+      margin-top: 15px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .drop-zone.dragover {
+      background: #cfe2ff;
     }
   </style>
 </head>
@@ -65,6 +80,8 @@
     <input type="file" id="fileInput" accept="image/*,video/*" multiple>
     <input type="file" id="zipInput" accept=".zip">
   </div>
+
+  <div id="dropZone" class="drop-zone">🚀 Seret & letakkan file di sini</div>
 
   <div class="buttons">
     <button id="exportAllBtn">Ekspor Semua (ZIP)</button>
@@ -85,17 +102,20 @@
     const fileInput = document.getElementById("fileInput");
     const zipInput = document.getElementById("zipInput");
     const gallery = document.getElementById("gallery");
+    const dropZone = document.getElementById("dropZone");
     const exportAllBtn = document.getElementById("exportAllBtn");
     const exportSelectedBtn = document.getElementById("exportSelectedBtn");
     const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
     const exitSelectBtn = document.getElementById("exitSelectBtn");
 
-    let selectMode = false; // mode pilih
+    let selectMode = false;
 
-    // Load dari localStorage
+    // Load data dari localStorage
     window.onload = () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
+      savedFiles.forEach((file, idx) =>
+        addMedia(file.src, file.type, file.name, idx)
+      );
     };
 
     // Tambah media ke galeri
@@ -112,17 +132,15 @@
       if (type.startsWith("image")) {
         element = document.createElement("img");
         element.src = src;
-      } else if (type.startsWith("video")) {
+      } else {
         element = document.createElement("video");
         element.src = src;
         element.controls = true;
       }
 
-      // Event untuk toggle pilih
+      // Event klik (pilih saat mode select)
       element.addEventListener("click", () => {
-        if (selectMode) {
-          checkbox.checked = !checkbox.checked;
-        }
+        if (selectMode) checkbox.checked = !checkbox.checked;
       });
 
       // Long press untuk masuk mode pilih
@@ -133,14 +151,10 @@
           checkbox.checked = true;
         }, 500);
       };
-      const endPress = () => {
-        clearTimeout(pressTimer);
-      };
-
+      const endPress = () => clearTimeout(pressTimer);
       element.addEventListener("mousedown", startPress);
       element.addEventListener("mouseup", endPress);
       element.addEventListener("mouseleave", endPress);
-
       element.addEventListener("touchstart", startPress);
       element.addEventListener("touchend", endPress);
 
@@ -159,17 +173,14 @@
       selectMode = false;
       document.body.classList.remove("select-mode");
       exitSelectBtn.style.display = "none";
-      // uncheck semua
       document.querySelectorAll(".item input[type='checkbox']").forEach(cb => cb.checked = false);
     }
 
     exitSelectBtn.addEventListener("click", exitSelectMode);
 
-    // Upload file baru (foto & video)
-    fileInput.addEventListener("change", (event) => {
-      const files = event.target.files;
+    // Upload file (foto/video)
+    function handleFiles(files) {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-
       Array.from(files).forEach((file) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -180,6 +191,19 @@
         };
         reader.readAsDataURL(file);
       });
+    }
+    fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+    // Drag & drop upload
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      handleFiles(e.dataTransfer.files);
     });
 
     // Import ZIP
@@ -188,33 +212,39 @@
       if (!file) return;
 
       const zip = new JSZip();
-      const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-
+      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
       const contents = await zip.loadAsync(file);
+
       for (const filename in contents.files) {
         const zipEntry = contents.files[filename];
-        if (!zipEntry.dir && (filename.endsWith(".jpg") || filename.endsWith(".png") || filename.endsWith(".mp4"))) {
+        if (
+          !zipEntry.dir &&
+          (filename.toLowerCase().endsWith(".jpg") ||
+           filename.toLowerCase().endsWith(".jpeg") ||
+           filename.toLowerCase().endsWith(".png") ||
+           filename.toLowerCase().endsWith(".mp4"))
+        ) {
           const blob = await zipEntry.async("blob");
           const reader = new FileReader();
           reader.onload = () => {
             const src = reader.result;
-            const type = filename.endsWith(".mp4") ? "video/mp4" : "image/jpeg";
+            const type = filename.toLowerCase().endsWith(".mp4")
+              ? "video/mp4"
+              : "image/jpeg";
             savedFiles.push({ src, type, name: filename });
             localStorage.setItem("media", JSON.stringify(savedFiles));
-            addMedia(src, type, filename, savedFiles.length - 1);
+            addMedia(src, type, filename, savedFiles.length - 1); // langsung tampil
           };
           reader.readAsDataURL(blob);
         }
       }
+      zipInput.value = "";
     });
 
-    // Ekspor semua ke ZIP
+    // Ekspor semua
     exportAllBtn.addEventListener("click", async () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      if (savedFiles.length === 0) {
-        alert("❌ Tidak ada file untuk diekspor!");
-        return;
-      }
+      if (savedFiles.length === 0) return alert("❌ Tidak ada file untuk diekspor!");
 
       const zip = new JSZip();
       savedFiles.forEach((file, idx) => {
@@ -222,7 +252,6 @@
         let ext = ".bin";
         if (file.type.startsWith("image")) ext = ".jpg";
         else if (file.type.startsWith("video")) ext = ".mp4";
-
         const fileName = file.name || `file_${idx + 1}${ext}`;
         zip.file(fileName, base64Data, { base64: true });
       });
@@ -236,15 +265,11 @@
       document.body.removeChild(a);
     });
 
-    // Ekspor terpilih (satu-satu)
+    // Ekspor terpilih
     exportSelectedBtn.addEventListener("click", () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
       const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
-
-      if (checkboxes.length === 0) {
-        alert("❌ Tidak ada file yang dipilih!");
-        return;
-      }
+      if (checkboxes.length === 0) return alert("❌ Tidak ada file yang dipilih!");
 
       checkboxes.forEach(cb => {
         const idx = cb.dataset.index;
@@ -253,28 +278,6 @@
       });
     });
 
-    // Hapus file terpilih
-    deleteSelectedBtn.addEventListener("click", () => {
-      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
-
-      if (checkboxes.length === 0) {
-        alert("❌ Tidak ada file yang dipilih!");
-        return;
-      }
-
-      const indexes = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
-      savedFiles = savedFiles.filter((_, i) => !indexes.includes(i));
-
-      localStorage.setItem("media", JSON.stringify(savedFiles));
-
-      gallery.innerHTML = "";
-      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
-
-      exitSelectMode();
-    });
-
-    // Fungsi unduh satu file
     function downloadFile(file, idx) {
       const a = document.createElement("a");
       a.href = file.src;
@@ -285,7 +288,22 @@
       document.body.removeChild(a);
     }
 
-    // Filter foto / video
+    // Hapus terpilih
+    deleteSelectedBtn.addEventListener("click", () => {
+      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
+      const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
+      if (checkboxes.length === 0) return alert("❌ Tidak ada file yang dipilih!");
+
+      const indexes = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
+      savedFiles = savedFiles.filter((_, i) => !indexes.includes(i));
+      localStorage.setItem("media", JSON.stringify(savedFiles));
+
+      gallery.innerHTML = "";
+      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
+      exitSelectMode();
+    });
+
+    // Filter galeri
     function filterGallery(type) {
       const items = document.querySelectorAll(".gallery .item");
       items.forEach(item => {
@@ -299,3 +317,4 @@
   </script>
 </body>
 </html>
+
