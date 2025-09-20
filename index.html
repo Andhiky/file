@@ -13,9 +13,40 @@
       padding: 20px;
     }
     h1 { color: #333; }
-    .upload-box, .buttons, .filter {
-      margin: 15px 0;
+
+    /* Upload Area */
+    .upload-area {
+      border: 2px dashed #ff4081;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      background: #fff0f6;
+      cursor: pointer;
+      transition: 0.3s;
+      max-width: 450px;
+      margin: 20px auto;
     }
+    .upload-area.dragover {
+      background: #ffe6ef;
+      border-color: #e73370;
+    }
+    .upload-btn {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 10px 18px;
+      background: #ff4081;
+      color: white;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .upload-btn:hover {
+      background: #e73370;
+    }
+
+    .buttons, .filter { margin: 15px 0; }
     button {
       margin: 5px;
       padding: 10px 15px;
@@ -27,6 +58,7 @@
       font-size: 14px;
     }
     button:hover { background: #0056b3; }
+
     .gallery {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -56,32 +88,22 @@
     body.select-mode .item input[type="checkbox"] {
       display: block;
     }
-    /* Drag & drop */
-    .drop-zone {
-      border: 3px dashed #007bff;
-      padding: 30px;
-      border-radius: 12px;
-      background: #eaf4ff;
-      color: #007bff;
-      font-size: 16px;
-      margin-top: 15px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .drop-zone.dragover {
-      background: #cfe2ff;
-    }
   </style>
 </head>
 <body>
   <h1>📸 Penyimpanan Foto & 🎥 Video</h1>
-  
-  <div class="upload-box">
-    <input type="file" id="fileInput" accept="image/*,video/*" multiple>
-    <input type="file" id="zipInput" accept=".zip">
+
+  <!-- Upload Area -->
+  <div id="uploadArea" class="upload-area">
+    <p>📷 🎥 <br>Klik atau tarik file ke sini untuk upload</p>
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+    <label for="fileInput" class="upload-btn">Pilih File</label>
   </div>
 
-  <div id="dropZone" class="drop-zone">🚀 Seret & letakkan file di sini</div>
+  <!-- Import ZIP -->
+  <div>
+    <input type="file" id="zipInput" accept=".zip">
+  </div>
 
   <div class="buttons">
     <button id="exportAllBtn">Ekspor Semua (ZIP)</button>
@@ -99,10 +121,10 @@
   <div class="gallery" id="gallery"></div>
 
   <script>
+    const uploadArea = document.getElementById("uploadArea");
     const fileInput = document.getElementById("fileInput");
     const zipInput = document.getElementById("zipInput");
     const gallery = document.getElementById("gallery");
-    const dropZone = document.getElementById("dropZone");
     const exportAllBtn = document.getElementById("exportAllBtn");
     const exportSelectedBtn = document.getElementById("exportSelectedBtn");
     const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
@@ -110,15 +132,12 @@
 
     let selectMode = false;
 
-    // Load data dari localStorage
+    // Load localStorage
     window.onload = () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      savedFiles.forEach((file, idx) =>
-        addMedia(file.src, file.type, file.name, idx)
-      );
+      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
     };
 
-    // Tambah media ke galeri
     function addMedia(src, type, name, idx) {
       const wrapper = document.createElement("div");
       wrapper.classList.add("item");
@@ -138,12 +157,11 @@
         element.controls = true;
       }
 
-      // Event klik (pilih saat mode select)
       element.addEventListener("click", () => {
         if (selectMode) checkbox.checked = !checkbox.checked;
       });
 
-      // Long press untuk masuk mode pilih
+      // Tekan lama untuk pilih
       let pressTimer;
       const startPress = () => {
         pressTimer = setTimeout(() => {
@@ -152,6 +170,7 @@
         }, 500);
       };
       const endPress = () => clearTimeout(pressTimer);
+
       element.addEventListener("mousedown", startPress);
       element.addEventListener("mouseup", endPress);
       element.addEventListener("mouseleave", endPress);
@@ -168,17 +187,15 @@
       document.body.classList.add("select-mode");
       exitSelectBtn.style.display = "inline-block";
     }
-
     function exitSelectMode() {
       selectMode = false;
       document.body.classList.remove("select-mode");
       exitSelectBtn.style.display = "none";
       document.querySelectorAll(".item input[type='checkbox']").forEach(cb => cb.checked = false);
     }
-
     exitSelectBtn.addEventListener("click", exitSelectMode);
 
-    // Upload file (foto/video)
+    // Handle file input
     function handleFiles(files) {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
       Array.from(files).forEach((file) => {
@@ -192,17 +209,18 @@
         reader.readAsDataURL(file);
       });
     }
+
     fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
 
-    // Drag & drop upload
-    dropZone.addEventListener("dragover", (e) => {
+    // Drag & Drop
+    uploadArea.addEventListener("dragover", (e) => {
       e.preventDefault();
-      dropZone.classList.add("dragover");
+      uploadArea.classList.add("dragover");
     });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", (e) => {
+    uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));
+    uploadArea.addEventListener("drop", (e) => {
       e.preventDefault();
-      dropZone.classList.remove("dragover");
+      uploadArea.classList.remove("dragover");
       handleFiles(e.dataTransfer.files);
     });
 
@@ -210,52 +228,38 @@
     zipInput.addEventListener("change", async (event) => {
       const file = event.target.files[0];
       if (!file) return;
-
       const zip = new JSZip();
-      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
+      const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
       const contents = await zip.loadAsync(file);
 
       for (const filename in contents.files) {
         const zipEntry = contents.files[filename];
-        if (
-          !zipEntry.dir &&
-          (filename.toLowerCase().endsWith(".jpg") ||
-           filename.toLowerCase().endsWith(".jpeg") ||
-           filename.toLowerCase().endsWith(".png") ||
-           filename.toLowerCase().endsWith(".mp4"))
-        ) {
+        if (!zipEntry.dir && (filename.endsWith(".jpg") || filename.endsWith(".png") || filename.endsWith(".mp4"))) {
           const blob = await zipEntry.async("blob");
           const reader = new FileReader();
           reader.onload = () => {
             const src = reader.result;
-            const type = filename.toLowerCase().endsWith(".mp4")
-              ? "video/mp4"
-              : "image/jpeg";
+            const type = filename.endsWith(".mp4") ? "video/mp4" : "image/jpeg";
             savedFiles.push({ src, type, name: filename });
             localStorage.setItem("media", JSON.stringify(savedFiles));
-            addMedia(src, type, filename, savedFiles.length - 1); // langsung tampil
+            addMedia(src, type, filename, savedFiles.length - 1);
           };
           reader.readAsDataURL(blob);
         }
       }
-      zipInput.value = "";
     });
 
-    // Ekspor semua
+    // Ekspor semua ZIP
     exportAllBtn.addEventListener("click", async () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      if (savedFiles.length === 0) return alert("❌ Tidak ada file untuk diekspor!");
-
+      if (savedFiles.length === 0) return alert("❌ Tidak ada file!");
       const zip = new JSZip();
       savedFiles.forEach((file, idx) => {
         const base64Data = file.src.split(",")[1];
-        let ext = ".bin";
-        if (file.type.startsWith("image")) ext = ".jpg";
-        else if (file.type.startsWith("video")) ext = ".mp4";
+        let ext = file.type.startsWith("image") ? ".jpg" : ".mp4";
         const fileName = file.name || `file_${idx + 1}${ext}`;
         zip.file(fileName, base64Data, { base64: true });
       });
-
       const content = await zip.generateAsync({ type: "blob" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(content);
@@ -269,8 +273,7 @@
     exportSelectedBtn.addEventListener("click", () => {
       const savedFiles = JSON.parse(localStorage.getItem("media")) || [];
       const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
-      if (checkboxes.length === 0) return alert("❌ Tidak ada file yang dipilih!");
-
+      if (checkboxes.length === 0) return alert("❌ Tidak ada file!");
       checkboxes.forEach(cb => {
         const idx = cb.dataset.index;
         const file = savedFiles[idx];
@@ -278,6 +281,20 @@
       });
     });
 
+    // Hapus terpilih
+    deleteSelectedBtn.addEventListener("click", () => {
+      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
+      const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
+      if (checkboxes.length === 0) return alert("❌ Tidak ada file!");
+      const indexes = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
+      savedFiles = savedFiles.filter((_, i) => !indexes.includes(i));
+      localStorage.setItem("media", JSON.stringify(savedFiles));
+      gallery.innerHTML = "";
+      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
+      exitSelectMode();
+    });
+
+    // Download file
     function downloadFile(file, idx) {
       const a = document.createElement("a");
       a.href = file.src;
@@ -288,34 +305,16 @@
       document.body.removeChild(a);
     }
 
-    // Hapus terpilih
-    deleteSelectedBtn.addEventListener("click", () => {
-      let savedFiles = JSON.parse(localStorage.getItem("media")) || [];
-      const checkboxes = document.querySelectorAll(".item input[type='checkbox']:checked");
-      if (checkboxes.length === 0) return alert("❌ Tidak ada file yang dipilih!");
-
-      const indexes = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
-      savedFiles = savedFiles.filter((_, i) => !indexes.includes(i));
-      localStorage.setItem("media", JSON.stringify(savedFiles));
-
-      gallery.innerHTML = "";
-      savedFiles.forEach((file, idx) => addMedia(file.src, file.type, file.name, idx));
-      exitSelectMode();
-    });
-
-    // Filter galeri
+    // Filter
     function filterGallery(type) {
       const items = document.querySelectorAll(".gallery .item");
       items.forEach(item => {
-        if (type === "all" || item.dataset.type === type) {
-          item.style.display = "block";
-        } else {
-          item.style.display = "none";
-        }
+        item.style.display = (type === "all" || item.dataset.type === type) ? "block" : "none";
       });
     }
   </script>
 </body>
 </html>
+
 
 
